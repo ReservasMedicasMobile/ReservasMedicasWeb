@@ -1,59 +1,81 @@
 import { Component, OnInit } from '@angular/core';
-import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
-import { Especialidad } from '../../interfaces/especialidad';
-import { CarritoService } from '../../services/carrito.service';
 import { CommonModule } from '@angular/common';
-import { ApiService } from '../../services/api.service';
+import { CarritoService } from '../../services/carrito.service';
+import { TurnosService } from '../../services/turnos.service';
+import { PasarelaPagoService } from '../pasarela-pago/pasarela-pago.service'; // ✅ Importá el servicio nuevo
 
 @Component({
   selector: 'app-carrito',
   standalone: true,
-  imports: [FormsModule, CommonModule, RouterLink],
+  imports: [CommonModule, RouterLink],
   templateUrl: './carrito.component.html',
   styleUrls: ['./carrito.component.css']
 })
 export class CarritoComponent implements OnInit {
-  carritoVacio: boolean = false;
-  usuarioLogueado: boolean = true;
-  especialidad: Especialidad | undefined;
 
-  carritoItems: any[] = [];
-  total: number = 0;
+  turnos: any[] = [];
+  turnosConDetalles: any[] = [];
 
-  constructor(private router: Router, private carritoService: CarritoService, private apiService: ApiService) {}
+  especialidadesList: any[] = [];
+  profesionalesList: any[] = [];
 
-  ngOnInit() {
-    if (this.apiService.isLoggedIn()){
-      this.router.navigate(['/carrito']);
-    } else {
-      alert('Por favor, Inicia sesión para agendar un turno');
-      this.router.navigate(['/iniciarSesion']);
-    }
-    this.carritoItems = this.carritoService.obtenerCarritoItems();
-    this.actualizarTotal();
+  constructor(
+    private carritoService: CarritoService,
+    private turnosService: TurnosService,
+    private pasarelaPago: PasarelaPagoService, // ✅ Inyectá el servicio de Stripe
+    private router: Router
+  ) {}
+
+  ngOnInit(): void {
+    this.turnosService.obtenerEspecialidades().subscribe((esp) => {
+      this.especialidadesList = esp;
+
+      this.turnosService.obtenerProfesionales().subscribe((prof) => {
+        this.profesionalesList = prof;
+
+        this.cargarTurnos();
+      });
+    });
   }
 
-  actualizarFechaHorario(index: number, event: Event, tipo: string) {
-    const valor = (event.target as HTMLInputElement).value;
-    if (tipo === 'fecha') {
-      this.carritoItems[index].fecha = valor;
-    } else if (tipo === 'horario') {
-      this.carritoItems[index].horario = valor;
-    }
-    this.carritoService.actualizarItem(index, this.carritoItems[index].fecha, this.carritoItems[index].horario);
-    this.actualizarTotal();
+  cargarTurnos(): void {
+    this.turnos = this.carritoService.obtenerTurnos();
+
+    this.turnosConDetalles = this.turnos.map(t => {
+      const especialidadNombre = this.especialidadesList.find(e => e.id === +t.especialidad)?.nombre || 'Desconocido';
+      const profesionalNombre = this.profesionalesList.find(p => p.id === +t.profesional)?.nombre || 'Desconocido';
+
+      return {
+        ...t,
+        especialidadNombre,
+        profesionalNombre,
+        precio: 7600 // Podés hacerlo dinámico más adelante
+      };
+    });
   }
 
-  actualizarTotal() {
-    this.total = this.calcularTotal();
+  irATurnos(): void {
+    this.router.navigate(['/turnos']);
   }
 
-  calcularTotal() {
-    return this.carritoItems.reduce((total, item) => total + (item.precio * item.cantidad), 0);
+  eliminarTurno(index: number): void {
+    this.carritoService.eliminarTurno(index);
+    this.cargarTurnos();
   }
 
-  irAPasarelaPagos() {
-    this.router.navigate(['/pasarela-pagos']);
+  limpiarCarrito(): void {
+    this.carritoService.limpiarCarrito();
+    this.cargarTurnos();
+  }
+
+  irAPagar(): void {
+    const items = this.turnosConDetalles.map(t => ({
+      title: `${t.especialidadNombre} - ${t.profesionalNombre}`,
+      image: 'https://via.placeholder.com/150', // Reemplazá por imágenes reales si tenés
+      price: t.precio
+    }));
+
+    this.pasarelaPago.onProceedToPay(items); // ✅ Usás el servicio centralizado
   }
 }

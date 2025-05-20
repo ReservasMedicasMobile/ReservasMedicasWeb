@@ -1,57 +1,51 @@
 import { Injectable } from '@angular/core';
-import { BehaviorSubject } from 'rxjs';
+import { HttpClient } from '@angular/common/http';
+import { Observable } from 'rxjs';
+import { environment } from '../../environment/environment'; // ajustá la ruta según tu proyecto
 
 @Injectable({
   providedIn: 'root'
 })
 export class CarritoService {
 
-  private carritoItems: any[] = [];
-  private carritoItemCount = new BehaviorSubject<number>(0);
-  carritoItemCount$ = this.carritoItemCount.asObservable();
+  private turnos: any[] = [];
 
-  Carrito: any;
-
-  constructor() { }
-
-  agregarAlCarrito(item: any) {
-
-    const existingItem = this.carritoItems.find(i => i.id === item.id);
-    if (existingItem) {
-      existingItem.cantidad++;
-      existingItem.subtotal += item.precio;
-    } else {
-      const carritoItem = {
-        id: item.id,
-        titulo: item.titulo,
-        precio: item.precio,
-        cantidad: 1,
-        fecha: '',
-        horario: '',
-        subtotal: item.precio
-      };
-      this.carritoItems.push(carritoItem);
-    }
-    this.carritoItemCount.next(this.carritoItems.reduce((acc, item) => acc + item.cantidad, 0));
-  }
-  
-  
-
-  obtenerCarritoItems() {
-    return this.carritoItems;
-  }
-
-  actualizarItem(index: number, fecha: string, horario: string) {
-    if (this.carritoItems[index]) {
-      this.carritoItems[index].fecha = fecha;
-      this.carritoItems[index].horario = horario;
+  constructor(private http: HttpClient) {
+    const data = localStorage.getItem('carritoTurnos');
+    if (data) {
+      this.turnos = JSON.parse(data);
     }
   }
 
-  obtenerTotal() {
-    return this.carritoItems.reduce((total, item) => total + item.subtotal, 0);
+  agregarTurno(turno: any) {
+    this.turnos.push(turno);
+    this.guardarEnLocalStorage();
   }
 
+  obtenerTurnos(): any[] {
+    return this.turnos;
+  }
 
+  eliminarTurno(index: number) {
+    if (index >= 0 && index < this.turnos.length) {
+      this.turnos.splice(index, 1);
+      this.guardarEnLocalStorage();
+    }
+  }
+
+  limpiarCarrito() {
+    this.turnos = [];
+    this.guardarEnLocalStorage();
+  }
+
+  private guardarEnLocalStorage() {
+    localStorage.setItem('carritoTurnos', JSON.stringify(this.turnos));
+  }
+
+  crearSesionPago(turnoData: any): Observable<{ url: string }> {
+    // Usamos la URL del backend del environment
+    const urlBackend = `${environment.serverURL}/create-checkout-session`;
+
+    return this.http.post<{ url: string }>(urlBackend, turnoData);
+  }
 }
-
